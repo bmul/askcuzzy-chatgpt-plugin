@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion : '2010-09-09'
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+Description: askcuzzy.com ECR repo
+
+Parameters:
+  RepoName:
+    Description: Repo name
+    Type: String
+  EnvironmentName:
+    Description: Environment name used to maintain uniqueness across resource names
+    Type: String
+  EnvironmentType:
+    AllowedValues: ["development", "staging", "production"]
+    Type: String
+  IsFeatureBranch:
+    AllowedValues: ["true", "false"]
+    Default: false
+    Type: String
+
+Conditions:
+  IsMainBranch: !Equals [!Ref IsFeatureBranch, "false"]
+
+Resources:
+  AskPGImageRepo:
+    Condition: IsMainBranch
+    Properties:
+      ImageTagMutability: IMMUTABLE # All image tags within the repository will be immutable which will prevent them from being overwritten
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+            {
+              "rulePriority": 1,
+              "description": "Keep only 10 images",
+              "selection": {
+                "tagStatus": "any",
+                "countType": "imageCountMoreThan",
+                "countNumber": 10
+              },
+              "action": { "type": "expire" }
+            }]
+          }
+      RepositoryName: !Ref RepoName
+    Type: "AWS::ECR::Repository"

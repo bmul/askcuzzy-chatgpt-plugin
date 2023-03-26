@@ -1,0 +1,132 @@
+on:
+  workflow_call:
+    inputs:
+      api-stack-name:
+        default: askcuzzy
+        type: string
+      ecr-stack-name:
+        default: askcuzzy-ecr
+        type: string
+      environment-name:
+        required: true
+        type: string
+      environment-type:
+        required: true
+        type: string
+      image-name:
+        default: askcuzzy.com/chatgpt-plugin
+        type: string
+      image-tag:
+        default: "1.0.0-${{ github.ref_name }}-${{ github.sha }}"
+        type: string
+      is-feature-branch:
+        default: false
+        type: boolean
+    secrets:
+      aws-access-key-id:
+        required: true
+      aws-secret-access-key:
+        required: true
+      openai-api-key:
+        required: true
+
+jobs:
+
+  build-and-deploy-image:
+    runs-on: ubuntu-latest
+    needs: [unit-test]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.aws-access-key-id }}
+          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          aws-region: us-east-1
+      
+      - name: Sanitize environment name
+        uses: mad9000/actions-find-and-replace-string@1
+        id: sanitized-environment-name
+        with:
+          source: ${{ inputs.environment-name }}
+          find: '/'
+          replace: '-'
+
+      - name: Deploy ECR Repo
+        run: |
+          sam deploy \
+            --template templates/template-ecr.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --resolve-s3 \
+            --stack-name ${{ inputs.ecr-stack-name }}-${{ steps.sanitized-environment-name.outputs.value }} \
+            --parameter-overrides 'RepoName=${{ inputs.image-name }}  \
+                                   EnvironmentName=${{ steps.sanitized-environment-name.outputs.value }} \
+                                   EnvironmentType=${{ inputs.environment-type }} \
+                                   IsFeatureBranch=${{ inputs.is-feature-branch }}' \
+            --tags 'owner=bm \
+                    project-id=askcuzzy \
+                    environment-name=${{ steps.sanitized-environment-name.outputs.value }} \
+                    environment-type=${{ inputs.environment-type }}' \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and deploy plugin docker image to ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ inputs.image-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+        run: |
+          docker build -f Dockerfile -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+
+  # deploy-backend:
+  #   runs-on: ubuntu-latest
+  #   needs: [build-and-deploy-image]
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: aws-actions/setup-sam@v2
+  #     - uses: aws-actions/configure-aws-credentials@v1
+  #       with:
+  #         aws-access-key-id: ${{ secrets.aws-access-key-id }}
+  #         aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+  #         aws-region: us-east-1
+      
+  #     - name: Sanitize environment name
+  #       uses: mad9000/actions-find-and-replace-string@1
+  #       id: sanitized-environment-name
+  #       with:
+  #         source: ${{ inputs.environment-name }}
+  #         find: '/'
+  #         replace: '-'
+
+  #     - uses: actions/setup-python@v4
+  #       with:
+  #         python-version: '3.9'
+  #     - name: Build and Deploy API
+  #       run: |
+  #         sam build
+  #         sam deploy \
+  #         --template templates/template.yml \
+  #           --capabilities CAPABILITY_NAMED_IAM \
+  #           --resolve-image-repos \
+  #           --resolve-s3 \
+  #           --stack-name ${{ inputs.api-stack-name }}-${{ steps.sanitized-environment-name.outputs.value }} \
+  #           --parameter-overrides 'EnvironmentName=${{ steps.sanitized-environment-name.outputs.value }} \
+  #                                  EnvironmentType=${{ inputs.environment-type }} \
+  #                                  GitCommitHash=${{ github.sha }} \
+  #                                  ImageName=${{ inputs.image-name }} \
+  #                                  ImageTag=${{ inputs.image-tag }} \
+  #                                  IsFeatureBranch=${{ inputs.is-feature-branch }} \
+  #                                  OpenaiApiKey=${{ secrets.openai-api-key }}' \
+  #           --tags 'owner=bm \
+  #                   project-id=askcuzzy \
+  #                   environment-name=${{ steps.sanitized-environment-name.outputs.value }} \
+  #                   environment-type=${{ inputs.environment-type }}' \
+  #           --no-confirm-changeset \
+  #           --no-fail-on-empty-changeset

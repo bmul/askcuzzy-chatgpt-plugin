@@ -1,0 +1,12 @@
+on: workflow_dispatch
+
+jobs:
+  call-workflow:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment-name: prod
+      environment-type: production
+    secrets:
+      aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+      aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+      openai-api-key: ${{ secrets.OPENAI_API_KEY }}

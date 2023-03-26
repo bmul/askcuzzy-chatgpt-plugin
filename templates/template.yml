@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion : '2010-09-09'
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+Description: AskCuzzy ECS Cluster
+
+Conditions:
+  IsMainBranch: !Equals [!Ref IsFeatureBranch, "false"]
+
+Mappings:
+  ApiDomainSettings:
+    development:
+      DomainName: api.dev.askcuzzy.com
+    staging:
+      DomainName: api.staging.askcuzzy.com
+    production:
+      DomainName: api.askcuzzy.com
+  WebDomainSettings:
+    development:
+      DomainName: dev.askcuzzy.com
+    staging:
+      DomainName: staging.askcuzzy.com
+    production:
+      DomainName: askcuzzy.com
+  HostedZoneSettings:
+    development:
+      RootHostedZoneName: dev.askcuzzy.com.
+      RootHostedZoneId: tbd
+    staging:
+      RootHostedZoneName: staging.askcuzzy.com.
+      RootHostedZoneId: tbd
+    production:
+      RootHostedZoneName: askcuzzy.com.
+      RootHostedZoneId: tbd
+  RetentionPolicySettings:
+    development:
+      DeletionPolicy: Delete
+      UpdateReplacePolicy: Delete
+    staging:
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+    production:
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+
+Resources:
